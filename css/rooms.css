@@ -1,0 +1,109 @@
+/*
+  The room lookup, the in-person seals, pieces without a photo, and the
+  Chinese-first label order. Loaded after game.css and uses its tokens.
+*/
+/* ---- the room lookup, for a visitor inside the real museum ---- */
+
+.room-floor + .room-floor { margin-top: 16px; }
+.room-floor h3 { margin: 0 0 8px; font: 800 18px/1 var(--font-ui); padding-bottom: 6px; border-bottom: 2px solid var(--ink); }
+.room-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+#panel-body .room-btn {
+  position: relative;
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  min-height: 84px;
+  padding: 10px 12px;
+  text-align: left;
+  border-left: 4px solid var(--jade);
+}
+.room-btn strong { font: 800 26px/1 var(--font-ui); letter-spacing: 0.02em; }
+.room-btn span { font: 650 13px/1.25 var(--font-ui); }
+.room-btn small { font: 500 12px/1.2 var(--font-ui); color: var(--ink-soft); }
+.room-btn em { position: absolute; top: 8px; right: 8px; padding: 2px 6px; border-radius: 3px; background: var(--cinnabar); color: #fff; font: 700 10.5px/1.3 var(--font-ui); font-style: normal; }
+#panel-body .room-btn.here { background: #fffaf0; border-left-color: var(--cinnabar); }
+#panel-body .room-btn.other { border-left-color: var(--paper-3); }
+
+.room-head h3 { margin: 0; font: 800 22px/1.2 var(--font-ui); }
+.room-head .card-meta { color: var(--ink-soft); }
+.room-progress { padding: 8px 12px; border-radius: var(--radius); background: var(--paper-2); font: 600 14px/1.4 var(--font-ui); }
+.room-list { display: grid; gap: 8px; margin-bottom: 14px; }
+#panel-body .room-row { display: flex; align-items: center; gap: 12px; padding: 8px 12px 8px 8px; text-align: left; }
+.room-row-text { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.room-row-text b { font: 700 15px/1.3 var(--font-ui); }
+.room-row-text small { font: 500 12.5px/1.3 var(--font-ui); color: var(--ink-soft); }
+.room-marks { display: flex; gap: 4px; flex: none; }
+.room-marks i { font-style: normal; font-weight: 800; }
+.mark-spot { color: var(--jade); }
+.mark-plan { color: var(--gold); text-shadow: 0 1px 0 var(--ink); }
+
+.thumb {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  padding: 4px;
+  border-radius: 4px;
+  background: radial-gradient(circle, #3b3036 0%, #19141a 80%);
+}
+.thumb-none {
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  color: #cbbfc6;
+  font: 600 10.5px/1.2 var(--font-ui);
+  text-align: center;
+}
+
+/* found it in the real museum */
+.spot-box { margin: 16px 0 12px; padding: 12px 14px; border-radius: var(--radius); background: var(--paper-2); border-left: 4px solid var(--jade); }
+.spot-box h4 { margin: 0 0 6px !important; }
+#panel-body .spot-btn { width: 100%; text-align: left; }
+#panel-body .spot-btn.on { background: var(--jade); color: #fff; }
+
+.nb-spot { position: absolute; top: 6px; left: 8px; font-style: normal; font-weight: 800; color: var(--jade); }
+.photo-credit { font-size: 12.5px; color: var(--ink-soft); }
+.seal-row { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--paper-3); }
+.seal-slot { margin: 0; display: grid; justify-items: center; gap: 6px; text-align: center; }
+.seal-slot > span { width: 72px; height: 72px; border: 2px dashed var(--paper-3); border-radius: 50%; }
+.seal-slot figcaption { font: 600 11.5px/1.3 var(--font-ui); color: var(--ink-soft); }
+.seal-slot.earned figcaption { color: var(--jade-deep); }
+.book-links { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* pieces without an openly licensed photo yet */
+.card-zoom.no-photo {
+  display: grid;
+  place-items: center;
+  width: 124px;
+  height: 124px;
+  padding: 12px;
+  cursor: default;
+  border: 1px dashed rgba(216, 178, 90, 0.6);
+  color: #cbbfc6;
+  font: 600 12px/1.35 var(--font-ui);
+  text-align: center;
+}
+.nb-detail .card-zoom.no-photo { width: 100%; height: 120px; color: var(--ink-soft); border-color: var(--paper-3); margin-bottom: 14px; }
+@media (min-width: 980px) { #card .card-zoom.no-photo { width: 100%; height: 140px; } }
+
+/* in Chinese, the Chinese title leads and the English one follows */
+.card-zh.big { font-size: 24px; }
+.card-en { margin: 2px 0 6px; font: 500 14px/1.35 var(--font-ui); color: #cbbfc6; }
+.nb-detail .card-en { color: var(--ink-soft); }
+:lang(zh-Hant) #text { letter-spacing: 0.02em; }
+
+.title-actions .rooms-btn { background: var(--paper-2); }
+.title-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.title-actions .lang-btn, #panel-body .lang-btn { font-family: var(--font-ui); }
+
+/* a planned tour's route */
+.tour-route { list-style: none; margin: 0 0 12px; padding: 0; counter-reset: stop; }
+.tour-stop { position: relative; padding: 0 0 12px 18px; border-left: 3px dashed var(--gold); margin-left: 8px; }
+.tour-stop::before { content: ""; position: absolute; left: -9px; top: 4px; width: 15px; height: 15px; border-radius: 50%; background: var(--cinnabar); border: 2px solid var(--paper); box-shadow: 0 0 0 2px var(--cinnabar); }
+.tour-stop h3 { margin: 0 0 8px; font: 800 16px/1.3 var(--font-ui); }
+.tour-stop h3 small { font: 500 13px var(--font-ui); color: var(--ink-soft); }
+.tour-pieces { display: grid; gap: 6px; }
+.tour-piece { display: flex; align-items: center; gap: 10px; }
+.tour-piece .thumb { width: 52px; height: 52px; }
+.tour-num { flex: none; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: var(--jade); color: #fff; font: 800 13px/1 var(--font-ui); }
+.sticky-actions { position: sticky; bottom: -18px; padding: 12px 0 4px; background: linear-gradient(rgba(246, 240, 227, 0), var(--paper) 30%); }

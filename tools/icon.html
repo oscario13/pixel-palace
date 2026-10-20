@@ -1,0 +1,71 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>icon</title>
+<!--
+  Draws the app icon as 32x32 pixel art: a palace roof over cinnabar
+  columns on jade. window.icon(size, pad) returns a PNG data URL; `pad` is
+  the fraction of empty margin (maskable icons need a safe zone).
+-->
+<script>
+const C = { jade: "#2f7d64", jadeDark: "#24624e", gold: "#d8b25a", goldLight: "#f1dd9e", goldDark: "#a8782a",
+  red: "#b5352b", redDark: "#852219", ink: "#1f1a1c", paper: "#f6f0e3", paperDark: "#ddd1b8", night: "#2a2226" };
+
+function art() {
+  const g = Array.from({ length: 32 }, () => Array(32).fill(null));
+  const fill = (x0, y0, x1, y1, c) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) g[y][x] = c; };
+  // roof: a curved hip roof with upturned eaves
+  fill(11, 6, 20, 6, C.goldLight);
+  fill(9, 7, 22, 7, C.gold);
+  fill(7, 8, 24, 8, C.gold);
+  fill(5, 9, 26, 9, C.gold);
+  fill(3, 10, 28, 10, C.gold);
+  g[9][3] = C.gold; g[9][28] = C.gold; g[8][2] = C.goldLight; g[8][29] = C.goldLight;
+  fill(5, 11, 26, 11, C.goldDark);
+  for (let x = 8; x <= 23; x += 3) g[8][x] = C.goldDark;
+  g[5][11] = C.gold; g[5][20] = C.gold;
+  // beam and columns
+  fill(7, 12, 24, 13, C.redDark);
+  fill(8, 14, 10, 24, C.red); fill(21, 14, 23, 24, C.red);
+  fill(8, 14, 8, 24, "#d4553f"); fill(21, 14, 21, 24, "#d4553f");
+  // doorway glowing with lamplight
+  fill(12, 15, 19, 24, C.night);
+  fill(13, 17, 18, 24, "#4a3a2a");
+  fill(14, 19, 17, 24, C.gold);
+  fill(15, 20, 16, 24, C.goldLight);
+  // steps
+  fill(6, 25, 25, 25, C.paper);
+  fill(4, 26, 27, 26, C.paperDark);
+  fill(3, 27, 28, 27, C.paper);
+  // ink outline around everything drawn
+  const out = g.map(r => r.slice());
+  for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+    if (g[y][x]) continue;
+    const near = [[1,0],[-1,0],[0,1],[0,-1]].some(([dx, dy]) => g[y + dy] && g[y + dy][x + dx]);
+    if (near) out[y][x] = C.ink;
+  }
+  return out;
+}
+
+window.icon = function (size, pad = 0.06) {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = C.jade;
+  ctx.fillRect(0, 0, size, size);
+  // soft lit backdrop
+  const r = ctx.createRadialGradient(size / 2, size * 0.55, size * 0.05, size / 2, size * 0.55, size * 0.7);
+  r.addColorStop(0, "#3a9677"); r.addColorStop(1, C.jadeDark);
+  ctx.fillStyle = r;
+  ctx.fillRect(0, 0, size, size);
+  const g = art();
+  const area = size * (1 - 2 * pad);
+  const px = Math.floor(area / 32);
+  const off = Math.floor((size - px * 32) / 2);
+  for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+    if (!g[y][x]) continue;
+    ctx.fillStyle = g[y][x];
+    ctx.fillRect(off + x * px, off + y * px, px, px);
+  }
+  return c.toDataURL("image/png");
+};
+</script>

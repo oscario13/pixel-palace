@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>art preview</title>
+<style>body{margin:0;background:#e8dfca;font:11px sans-serif;padding:8px} .row{display:flex;gap:6px;align-items:end;margin-bottom:6px} canvas{image-rendering:pixelated;background:#cfc3a6}</style>
+<script src="../js/art.js"></script>
+<body>
+<script>
+const S = 6;
+function big(c, s = S) { const b = Art.makeCanvas(c.width * s, c.height * s); const x = b.getContext("2d"); x.imageSmoothingEnabled = false; x.drawImage(c, 0, 0, b.width, b.height); return b; }
+for (const look of Object.keys(Art.LOOKS)) {
+  const f = Art.characterFrames(look);
+  const row = document.createElement("div"); row.className = "row";
+  row.append(look);
+  for (const dir of ["down", "up", "left", "right"]) for (const fr of f[dir]) row.append(big(fr));
+  document.body.append(row);
+}
+const row = document.createElement("div"); row.className = "row";
+for (const d of Object.values(Art.DECOR)) row.append(big(Art.fromRows(d.rows, d.pal)));
+document.body.append(row);
+</script>

@@ -1,0 +1,57 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>map preview</title>
+<style>body{margin:0;background:#17121c} canvas{image-rendering:pixelated;display:block}</style>
+<script src="../js/lang.js"></script>
+<script src="../js/pieces/bronze.js"></script>
+<script src="../js/pieces/jade.js"></script>
+<script src="../js/pieces/ceramics.js"></script>
+<script src="../js/pieces/crafts.js"></script>
+<script src="../js/tour-data.js"></script>
+<script src="../js/maps.js"></script>
+<script src="../js/world.js"></script>
+<script src="../js/art.js"></script>
+<script src="../js/artifact-sprites.js"></script>
+<script src="../js/tiles.js"></script>
+<body>
+<script>
+// Draws one map (?map=1F) the way the game will: static layer, then objects
+// and people sorted by depth, then crisp labels.
+const id = new URLSearchParams(location.search).get("map") || "1F";
+const S = +(new URLSearchParams(location.search).get("scale") || 3);
+const world = World.buildWorld(Maps.MAP_DEFS);
+const map = world.maps[id];
+const stars = TourData.GALLERIES.map(g => g.star);
+const base = Tiles.drawStatic(map, stars);
+const buf = Art.makeCanvas(base.width, base.height);
+const ctx = buf.getContext("2d");
+ctx.drawImage(base, 0, 0);
+const draws = Tiles.staticObjects(map).map(o => ({ depth: o.depth, fn: () => {
+  if (o.kind === "pillar") Tiles.pillar(ctx, o.x, o.y);
+  else if (o.kind === "plant") Tiles.plant(ctx, o.x, o.y);
+  else if (o.kind === "sign") Tiles.sign(ctx, o.x, o.y);
+  else Tiles.displayCase(ctx, o.case, Art.artifactCanvas(ARTIFACT_SPRITES[o.case.id]), { star: stars.includes(o.case.id) });
+}}));
+for (const n of map.npcs) {
+  const fr = Art.characterFrames(n.look)[n.dir][0];
+  draws.push({ depth: (n.y + 1) * 16, fn: () => ctx.drawImage(fr, n.x * 16, n.y * 16 - 2) });
+}
+draws.sort((a, b) => a.depth - b.depth).forEach(d => d.fn());
+const out = document.createElement("canvas");
+out.width = buf.width * S; out.height = buf.height * S;
+const o = out.getContext("2d");
+o.imageSmoothingEnabled = false;
+o.drawImage(buf, 0, 0, out.width, out.height);
+for (const l of Tiles.labels(map, TourData.GALLERIES)) {
+  const cx = l.x * S, cy = l.y * S;
+  if (l.pill) { o.fillStyle = l.pill; o.fillRect(cx - l.w * S / 2, cy - l.h * S / 2, l.w * S, l.h * S); }
+  o.fillStyle = l.color; o.textAlign = "center"; o.textBaseline = "middle";
+  const n = l.lines.length;
+  l.lines.forEach((ln, i) => {
+    const size = Math.round(l.h * S / n * 0.78 * (ln.size || 1) * (n > 1 ? 0.9 : 1));
+    o.font = `${ln.zh ? 600 : 500} ${size}px ${ln.zh ? '"PingFang TC","Noto Sans TC",sans-serif' : '"Helvetica Neue",sans-serif'}`;
+    o.fillText(ln.text, cx, cy + (i - (n - 1) / 2) * (l.h * S / n), l.w * S);
+  });
+}
+document.body.append(out);
+</script>

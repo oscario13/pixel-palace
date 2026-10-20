@@ -1,0 +1,130 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>pixelize</title>
+<!--
+  Opened by tools/pixelize.js in headless Chrome over http (so the canvas is
+  not tainted). window.pixelize(id) turns one cut-out photo into a small
+  quantised, outlined pixel sprite.
+-->
+<script>
+const INNER_W = 26, INNER_H = 24, COLORS = 8;
+// Where the object is lost inside its stand, sprite only the object:
+// [x0, y0, x1, y1] as fractions of the photo.
+const CROPS = {
+  "ivory-ball": [0.08, 0.3, 0.92, 0.56],
+  "boxwood-arhat": [0, 0, 1, 0.56]
+};
+
+function loadImage(src) {
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+}
+function cropped(img, crop) {
+  if (!crop) return img;
+  const [x0, y0, x1, y1] = crop;
+  const sx = Math.round(img.width * x0), sy = Math.round(img.height * y0);
+  const c = makeCanvas(Math.round(img.width * (x1 - x0)), Math.round(img.height * (y1 - y0)));
+  c.getContext("2d").drawImage(img, sx, sy, c.width, c.height, 0, 0, c.width, c.height);
+  return c;
+}
+function makeCanvas(w, h) { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
+
+// halve repeatedly so every source pixel is averaged in, then one last fit
+function downscale(img, w, h) {
+  let cur = img, cw = img.width, ch = img.height;
+  while (cw / 2 >= w * 1.5 && ch / 2 >= h * 1.5) {
+    const c = makeCanvas(Math.round(cw / 2), Math.round(ch / 2));
+    const x = c.getContext("2d"); x.imageSmoothingQuality = "high"; x.drawImage(cur, 0, 0, c.width, c.height);
+    cur = c; cw = c.width; ch = c.height;
+  }
+  const out = makeCanvas(w, h);
+  const x = out.getContext("2d"); x.imageSmoothingQuality = "high"; x.drawImage(cur, 0, 0, w, h);
+  return x.getImageData(0, 0, w, h);
+}
+
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min, s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  const h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h / 6, s, l];
+}
+function hslToRgb(h, s, l) {
+  if (s === 0) return [l * 255, l * 255, l * 255];
+  const f = (p, q, t) => { if (t < 0) t += 1; if (t > 1) t -= 1; if (t < 1 / 6) return p + (q - p) * 6 * t; if (t < 1 / 2) return q; if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6; return p; };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+  return [f(p, q, h + 1 / 3) * 255, f(p, q, h) * 255, f(p, q, h - 1 / 3) * 255];
+}
+
+// a little more saturation and contrast, the way pixel art reads
+function punch([r, g, b]) {
+  let [h, s, l] = rgbToHsl(r, g, b);
+  s = Math.min(1, s * 1.3);
+  l = Math.min(1, Math.max(0, 0.5 + (l - 0.5) * 1.2));
+  return hslToRgb(h, s, l);
+}
+
+function kmeans(points, k) {
+  const sorted = [...points].sort((a, b) => (a[0] + a[1] + a[2]) - (b[0] + b[1] + b[2]));
+  let centers = Array.from({ length: k }, (_, i) => sorted[Math.floor((i + 0.5) * sorted.length / k)].slice());
+  let assign = new Array(points.length).fill(0);
+  for (let it = 0; it < 14; it++) {
+    assign = points.map(p => {
+      let best = 0, bd = Infinity;
+      centers.forEach((c, i) => { const d = (p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2 + (p[2] - c[2]) ** 2; if (d < bd) { bd = d; best = i; } });
+      return best;
+    });
+    centers = centers.map((c, i) => {
+      const mine = points.filter((_, j) => assign[j] === i);
+      if (!mine.length) return c;
+      return [0, 1, 2].map(ch => mine.reduce((s, p) => s + p[ch], 0) / mine.length);
+    });
+  }
+  return { centers, assign };
+}
+
+const hex = c => "#" + c.map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, "0")).join("");
+const CHARS = "0123456789abcdefghijklmnopqrstuvwxyz";
+
+window.pixelize = async function (id) {
+  const img = cropped(await loadImage(`../images/objects/${id}.png`), CROPS[id]);
+  const s = Math.min(INNER_W / img.width, INNER_H / img.height);
+  const w = Math.max(3, Math.round(img.width * s)), h = Math.max(3, Math.round(img.height * s));
+  const data = downscale(img, w, h).data;
+  const opaque = [], points = [];
+  for (let i = 0; i < w * h; i++) {
+    if (data[i * 4 + 3] >= 120) { opaque.push(i); points.push(punch([data[i * 4], data[i * 4 + 1], data[i * 4 + 2]])); }
+  }
+  const k = Math.min(COLORS, new Set(points.map(p => p.map(v => v >> 3).join())).size);
+  const { centers, assign } = kmeans(points, k);
+  // outline: the darkest cluster, pushed much darker
+  const avg = [0, 1, 2].map(ch => points.reduce((sum, p) => sum + p[ch], 0) / points.length);
+  const [oh, os] = rgbToHsl(...avg);
+  const outline = hslToRgb(oh, Math.min(1, os * 0.8), 0.1);
+  const pal = [hex(outline), ...centers.map(hex)];
+  const W = w + 2, H = h + 2;
+  const grid = Array.from({ length: H }, () => new Array(W).fill("."));
+  opaque.forEach((i, j) => { grid[Math.floor(i / w) + 1][(i % w) + 1] = CHARS[assign[j] + 1]; });
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (grid[y][x] !== ".") continue;
+    const near = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const r = grid[y + dy]; return r && r[x + dx] && r[x + dx] !== "." && r[x + dx] !== "0"; });
+    if (near) grid[y][x] = "0";
+  }
+  return { w: W, h: H, pal, px: grid.map(r => r.join("")).join("") };
+};
+
+window.preview = function (sprites, scale = 6) {
+  document.body.style.cssText = "margin:0;background:#2b2433;display:flex;flex-wrap:wrap;gap:10px;padding:10px";
+  for (const [id, sp] of Object.entries(sprites)) {
+    const c = makeCanvas(sp.w * scale, sp.h * scale); c.title = id;
+    const x = c.getContext("2d");
+    for (let i = 0; i < sp.px.length; i++) {
+      const ch = sp.px[i]; if (ch === ".") continue;
+      x.fillStyle = sp.pal[CHARS.indexOf(ch)];
+      x.fillRect((i % sp.w) * scale, Math.floor(i / sp.w) * scale, scale, scale);
+    }
+    const box = document.createElement("div"); box.style.cssText = "background:#e9dfc8;padding:6px;font:10px sans-serif;width:140px;text-align:center";
+    box.append(c, document.createElement("br"), id); document.body.append(box);
+  }
+};
+</script>

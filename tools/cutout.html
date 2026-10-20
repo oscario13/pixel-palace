@@ -1,0 +1,151 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>cutout</title>
+<!--
+  Opened by tools/cutout.js in headless Chrome over http. window.cutout(id, opts)
+  lifts one museum photo off its studio backdrop and returns a PNG data URL.
+
+  The backdrops are smooth: a grey or black sweep that darkens toward the top
+  or the corners. So the background is grown inward from the edges of the
+  photo, one pixel at a time, as long as each step is a small change from its
+  neighbour (`step`) and stays close to the backdrop colour expected at that
+  spot (`far`), which is blended from the left and right edges of its row.
+  Whatever the fill can't reach is the object, holes included.
+-->
+<script>
+const MAX_SIDE = 480;
+
+function loadImage(src) {
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+}
+function makeCanvas(w, h) { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
+const dist = (d, i, r, g, b) => Math.hypot(d[i] - r, d[i + 1] - g, d[i + 2] - b);
+
+function median(values) {
+  const s = [...values].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
+// the backdrop colour at the left and right edge of every row
+function edgeColours(d, w, h, strip) {
+  const left = [], right = [];
+  for (let y = 0; y < h; y++) {
+    for (const [out, x0] of [[left, 0], [right, w - strip]]) {
+      const ch = [0, 1, 2].map(c => median(Array.from({ length: strip }, (_, k) => d[(y * w + x0 + k) * 4 + c])));
+      out.push(ch);
+    }
+  }
+  return { left, right };
+}
+
+function backgroundMask(d, w, h, { step, far, strip }) {
+  const { left, right } = edgeColours(d, w, h, strip);
+  const ref = (x, y) => { const t = x / (w - 1), a = left[y], b = right[y]; return [0, 1, 2].map(c => a[c] + (b[c] - a[c]) * t); };
+  const bg = new Uint8Array(w * h);
+  const queue = [];
+  const tryAdd = (x, y, fromI) => {
+    const k = y * w + x;
+    if (bg[k]) return;
+    const i = k * 4, r = ref(x, y);
+    if (dist(d, i, r[0], r[1], r[2]) > far) return;
+    if (fromI >= 0 && dist(d, i, d[fromI], d[fromI + 1], d[fromI + 2]) > step) return;
+    bg[k] = 1;
+    queue.push(k);
+  };
+  // seed from a thin ring just inside the edge, in case the photo has a frame line
+  for (let k = 0; k < strip; k++) {
+    for (let x = 0; x < w; x++) { tryAdd(x, k, -1); tryAdd(x, h - 1 - k, -1); }
+    for (let y = 0; y < h; y++) { tryAdd(k, y, -1); tryAdd(w - 1 - k, y, -1); }
+  }
+  for (let q = 0; q < queue.length; q++) {
+    const k = queue[q], x = k % w, y = (k - x) / w;
+    if (x > 0) tryAdd(x - 1, y, k * 4);
+    if (x < w - 1) tryAdd(x + 1, y, k * 4);
+    if (y > 0) tryAdd(x, y - 1, k * 4);
+    if (y < h - 1) tryAdd(x, y + 1, k * 4);
+  }
+  return bg;
+}
+
+// Keep the big pieces of the object; drop specks of dust and noise.
+function keepBig(fg, w, h, minShare) {
+  const label = new Int32Array(w * h).fill(-1);
+  const sizes = [];
+  for (let k = 0; k < w * h; k++) {
+    if (!fg[k] || label[k] >= 0) continue;
+    const id = sizes.length, stack = [k];
+    label[k] = id;
+    let n = 0;
+    while (stack.length) {
+      const j = stack.pop(); n++;
+      const x = j % w, y = (j - x) / w;
+      for (const [nx, ny] of [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]) {
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const m = ny * w + nx;
+        if (fg[m] && label[m] < 0) { label[m] = id; stack.push(m); }
+      }
+    }
+    sizes.push(n);
+  }
+  const biggest = Math.max(0, ...sizes);
+  const out = new Uint8Array(w * h);
+  for (let k = 0; k < w * h; k++) if (label[k] >= 0 && sizes[label[k]] >= biggest * minShare) out[k] = 1;
+  return out;
+}
+
+// The mask is found on a copy about 400px across, the size the thresholds
+// were tuned at, then scaled up softly and applied to the sharp photo.
+const MASK_SIDE = 420;
+
+window.cutout = async function (src, opts = {}) {
+  const o = { step: 9, far: 46, strip: 4, minShare: 0.04, ...opts };
+  const img = await loadImage(src);
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const c = makeCanvas(w, h), x = c.getContext("2d");
+  x.drawImage(img, 0, 0);
+  // the mask, at mask size
+  const ms = Math.min(1, MASK_SIDE / Math.max(w, h));
+  const mw = Math.round(w * ms), mh = Math.round(h * ms);
+  const small = makeCanvas(mw, mh), sx = small.getContext("2d");
+  sx.imageSmoothingQuality = "high";
+  sx.drawImage(img, 0, 0, mw, mh);
+  const sd = sx.getImageData(0, 0, mw, mh).data;
+  const bg = backgroundMask(sd, mw, mh, o);
+  let fg = new Uint8Array(mw * mh);
+  for (let k = 0; k < mw * mh; k++) fg[k] = bg[k] ? 0 : 1;
+  fg = keepBig(fg, mw, mh, o.minShare);
+  const kept = fg.reduce((a, v) => a + v, 0) / (mw * mh);
+  if (!kept) return { error: "nothing left" };
+  // edge pixels at half strength, then scaled up smoothly to the photo
+  const alpha = makeCanvas(mw, mh), ax = alpha.getContext("2d");
+  const ad = ax.createImageData(mw, mh);
+  for (let yy = 0; yy < mh; yy++) for (let xx = 0; xx < mw; xx++) {
+    const k = yy * mw + xx;
+    if (!fg[k]) continue;
+    const edge = [[xx - 1, yy], [xx + 1, yy], [xx, yy - 1], [xx, yy + 1]].some(([a, b]) => a >= 0 && b >= 0 && a < mw && b < mh && !fg[b * mw + a]);
+    ad.data[k * 4 + 3] = edge ? 140 : 255;
+  }
+  ax.putImageData(ad, 0, 0);
+  const big = makeCanvas(w, h), bx = big.getContext("2d");
+  bx.imageSmoothingQuality = "high";
+  bx.drawImage(alpha, 0, 0, w, h);
+  const bd = bx.getImageData(0, 0, w, h).data;
+  const id = x.getImageData(0, 0, w, h), d = id.data;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
+    const k = (yy * w + xx) * 4;
+    const a = bd[k + 3] < 24 ? 0 : bd[k + 3];
+    d[k + 3] = a;
+    if (a) { x0 = Math.min(x0, xx); y0 = Math.min(y0, yy); x1 = Math.max(x1, xx); y1 = Math.max(y1, yy); }
+  }
+  x.putImageData(id, 0, 0);
+  const pad = 3;
+  x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad); x1 = Math.min(w - 1, x1 + pad); y1 = Math.min(h - 1, y1 + pad);
+  const cw = x1 - x0 + 1, ch = y1 - y0 + 1, s = Math.min(1, MAX_SIDE / Math.max(cw, ch));
+  const out = makeCanvas(Math.round(cw * s), Math.round(ch * s));
+  const ox = out.getContext("2d");
+  ox.imageSmoothingQuality = "high";
+  ox.drawImage(c, x0, y0, cw, ch, 0, 0, out.width, out.height);
+  return { png: out.toDataURL("image/png"), kept: Math.round(kept * 1000) / 1000, w: out.width, h: out.height };
+};
+</script>
