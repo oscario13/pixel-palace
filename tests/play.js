@@ -103,6 +103,12 @@ async function secondVisit(client) {
   await key(client, "Enter");
   check("continues on 3F", await until(client, `PP.mode === "play" && PP.map.id === "3F"`));
   await advance(client, `!PP.busy`);
+  // standing by the top wall, every door's sign shows below the top bar
+  check("door signs aren't hidden under the top bar", await until(client, `(() => {
+    const v = PP.renderer.view, cam = PP.renderer.cam;
+    const bar = Math.max(document.getElementById("where").getBoundingClientRect().bottom, document.querySelector(".hud-buttons").getBoundingClientRect().bottom);
+    return PP.map.doors.every(d => (((d.y - 1) * 16 + 1) - Math.round(cam.y)) * v.scale / v.dpr >= bar);
+  })()`, 3000));
   await key(client, "KeyQ");
   await until(client, `document.querySelectorAll("#choices .choice").length > 0`);
   await choose(client, "Go to a gallery");
@@ -114,10 +120,12 @@ async function secondVisit(client) {
   await advance(client, `!!PP.lead && !PP.busy`);
   const floors = [];
   // note each map as it's reached, with where the visitor first stands on it
-  await client.eval(`window.__floors = []; window.__at = []; setInterval(() => { const id = PP.map.id; if (window.__floors[window.__floors.length - 1] !== id) { window.__floors.push(id); window.__at.push({ id, x: PP.player.x, y: PP.player.y, dir: PP.player.dir, w: PP.map.w, h: PP.map.h, lift: (PP.map.elevators || []).findIndex(e => e.x === PP.player.x && e.y + 1 === PP.player.y) }); } }, 15); true`);
+  await client.eval(`window.__floors = []; window.__at = []; setInterval(() => { const id = PP.map.id; if (window.__floors[window.__floors.length - 1] !== id) { window.__floors.push(id); window.__at.push({ id, x: PP.player.x, y: PP.player.y, dir: PP.player.dir, w: PP.map.w, h: PP.map.h, mat: PP.map.mat ? [PP.map.mat.x0, PP.map.mat.x1] : null, lift: (PP.map.elevators || []).findIndex(e => e.x === PP.player.x && e.y + 1 === PP.player.y) }); } }, 15); true`);
   const leftFrom = await client.eval(`(() => { const p = PP.player; const best = PP.map.elevators.map((e, i) => [Math.abs(e.x - p.x) + Math.abs(e.y + 1 - p.y), i]).sort((a, b) => a[0] - b[0]); return best.map(b => b[1]); })()`);
   await key(client, "KeyG");
   check("reaches Precious Crafts", await until(client, `PP.map.id === "precious-crafts"`, 20000));
+  // the recorder ticks on its own timer; let it note the new room first
+  await until(client, `window.__at.some(a => a.id === "precious-crafts")`, 2000);
   const path = await client.eval("window.__floors");
   const at = await client.eval("window.__at");
   check("step-free route skips 2F (elevator)", !path.includes("2F") && path.includes("1F"), path);
@@ -125,7 +133,8 @@ async function secondVisit(client) {
   check("the elevator opens on 1F from one of its shafts", on1 && on1.lift >= 0 && on1.dir === "down", on1);
   check("and it's a shaft near where the ride began", on1 && leftFrom.slice(0, 2).includes(on1.lift), [leftFrom, on1]);
   const inside = at.find(a => a.id === "precious-crafts");
-  check("Room 106 is entered through its door, walking in", inside && inside.y === inside.h - 2 && inside.dir === "up", inside);
+  // where you stand, not which way you face: the docent may turn you a moment later
+  check("Room 106 is entered through its door", inside && inside.y === inside.h - 2 && inside.x >= inside.mat[0] && inside.x <= inside.mat[1], inside);
   await advance(client, `document.querySelectorAll("#choices .choice").length > 0`);
   await choose(client, "look around");
   await advance(client, `!PP.busy && document.getElementById("dialog").hidden`);

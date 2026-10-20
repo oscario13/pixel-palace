@@ -256,14 +256,22 @@
 
   // how much of the screen the card (top) and the text box or touch pad
   // (bottom) cover, so the camera can keep the player clear of them
+  // How far the top bar (where you are, and the buttons) reaches down the
+  // screen, so the camera never parks a door sign or wall text behind it.
+  function topBarBottom() {
+    const parts = [document.getElementById("where"), document.querySelector(".hud-buttons")];
+    const bottom = Math.max(0, ...parts.filter(Boolean).map(el => el.getBoundingClientRect().bottom));
+    return bottom > 0 ? bottom + 4 : 0;
+  }
+
   function screenInsets() {
     const talk = document.getElementById("dialog");
     const card = document.getElementById("card");
-    let top = 0;
+    let top = topBarBottom();
     if (!card.hidden) {
       // on wide screens the card sits to one side and covers nothing central
       const r = card.getBoundingClientRect();
-      if (r.left < window.innerWidth / 2 && r.right > window.innerWidth / 2) top = r.bottom + 6;
+      if (r.left < window.innerWidth / 2 && r.right > window.innerWidth / 2) top = Math.max(top, r.bottom + 6);
     }
     const bottom = talk.hidden ? touchControlsHeight() : window.innerHeight - talk.getBoundingClientRect().top + 6;
     return [top, bottom];
