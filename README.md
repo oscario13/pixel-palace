@@ -190,6 +190,12 @@ Everything was checked against the museum's own pages in **October 2026**:
   cases stand in a grid in walking order, not where the museum's own cases
   stand. Objects on display change too. About says all of this.
 
+## Licence
+
+The code and the game's own text are under the MIT licence (`LICENSE`). The
+artifact photographs and the case sprites made from them are not: they stay
+under the museum's open data terms, below.
+
 ## Credits
 
 Artifact photographs: National Palace Museum, Taipei, Open Data
