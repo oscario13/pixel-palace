@@ -2,7 +2,7 @@
 // Caches the whole game on first visit so it keeps working offline,
 // for example inside the museum where Wi-Fi is unreliable. The sharp zoom
 // photos are large, so each one is kept the first time it's looked at.
-const VERSION = "pixel-palace-826e30a21cc8";
+const VERSION = "pixel-palace-04a457c2d27a";
 const ZOOM_CACHE = "pixel-palace-zoom-bcb98638";
 const FILES = [
   "./",
@@ -24,6 +24,7 @@ const FILES = [
   "js/maps.js",
   "js/panels.js",
   "js/render.js",
+  "js/save.js",
   "js/text.js",
   "js/tiles.js",
   "js/tour-data.js",

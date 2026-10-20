@@ -6,19 +6,16 @@
 */
 (function (root) {
   const { T, WALK, RUN } = Actors;
-  const SAVE_KEY = "pixel-palace-v1";
   const FADE = 0.32;
   const DUST_LIFE = 0.45;
   const HUM_AFTER = 9;
   const TURN_GRACE = 0.09;
-  const SETTINGS = { sound: true, music: true, autoTalk: true, stepFree: false, textSpeed: "normal", lang: "en" };
-  const TOUR_MODES = ["full", "short", "plan", "gallery"];
   const L = (en, zh) => Lang.L(en, zh);
 
   const G = root.PP = {
     world: null, map: null, renderer: null, mode: "title",
     player: null, docent: null, npcs: [], npcByMap: {},
-    seen: new Set(), settings: { ...SETTINGS, lang: Lang.preferred(navigator) },
+    seen: new Set(), settings: { ...Save.SETTINGS, lang: Lang.preferred(navigator) },
     tour: { active: false, mode: "full", gallery: null, visited: new Set() },
     plan: new Set(), stamps: new Set(), spotted: new Set(), challengeOffered: new Set(), sealsShown: new Set(),
     // "with" the docent following you, or exploring "alone"
@@ -727,63 +724,18 @@
     const p = G.player;
     const playing = G.map && G.mode === "play" && p;
     const pos = playing ? { map: G.map.id, x: p.moving ? p.fromX : p.x, y: p.moving ? p.fromY : p.y, dir: p.dir } : G.savedPos || null;
-    const data = {
-      v: 1, seen: [...G.seen], settings: G.settings, pos, plan: [...G.plan], stamps: [...G.stamps], spotted: [...G.spotted], companion: G.companion,
-      tour: { active: G.tour.active, mode: G.tour.mode, gallery: G.tour.gallery, visited: [...G.tour.visited] }
-    };
     if (playing) G.savedPos = pos;
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* private mode: progress lasts this visit only */ }
+    try { localStorage.setItem(Save.KEY, JSON.stringify(Save.serialize(G, pos))); } catch (e) { /* private mode: progress lasts this visit only */ }
   }
 
-  const SPEED_NAMES = ["slow", "normal", "fast", "instant"];
-
-  // Anything odd in storage is ignored rather than trusted: a bad save
-  // must never stop the game from starting.
+  // js/save.js checks everything it reads, so a bad save never stops the game.
   function loadSave() {
     let data = null;
-    try { data = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) { data = null; }
-    if (!data || typeof data !== "object") return;
-    try {
-      const known = new Set(TourData.fullTour().map(s => s[1]));
-      if (Array.isArray(data.seen)) G.seen = new Set(data.seen.filter(id => typeof id === "string" && known.has(id)));
-      if (data.settings && typeof data.settings === "object") {
-        for (const k of Object.keys(SETTINGS)) {
-          if (Object.hasOwn(data.settings, k) && typeof data.settings[k] === typeof SETTINGS[k]) G.settings[k] = data.settings[k];
-        }
-        if (!SPEED_NAMES.includes(G.settings.textSpeed)) G.settings.textSpeed = SETTINGS.textSpeed;
-        if (!Lang.LANGS.includes(G.settings.lang)) G.settings.lang = Lang.preferred(navigator);
-      }
-      const ids = list => (Array.isArray(list) ? list.filter(id => typeof id === "string" && known.has(id)) : []);
-      const galleries = new Set(TourData.GALLERIES.map(g => g.id));
-      if (data.tour && typeof data.tour === "object") {
-        G.tour.active = data.tour.active === true;
-        G.tour.mode = TOUR_MODES.includes(data.tour.mode) ? data.tour.mode : "full";
-        G.tour.gallery = typeof data.tour.gallery === "string" && galleries.has(data.tour.gallery) ? data.tour.gallery : null;
-        if (G.tour.mode === "gallery" && !G.tour.gallery) { G.tour.mode = "full"; G.tour.active = false; }
-        G.tour.visited = new Set(ids(data.tour.visited));
-      }
-      G.plan = new Set(ids(data.plan));
-      G.spotted = new Set(ids(data.spotted));
-      G.companion = data.companion === "alone" ? "alone" : "with";
-      if (Array.isArray(data.stamps)) G.stamps = new Set(data.stamps.filter(id => typeof id === "string" && galleries.has(id)));
-      const pos = data.pos;
-      if (!pos || typeof pos !== "object" || typeof pos.map !== "string" || !Object.hasOwn(G.world.maps, pos.map)) return;
-      const map = G.world.maps[pos.map];
-      if (!Number.isInteger(pos.x) || !Number.isInteger(pos.y) || typeof pos.dir !== "string" || !Object.hasOwn(Actors.DIRS, pos.dir)) return;
-      if (pos.x < 0 || pos.y < 0 || pos.x >= map.w || pos.y >= map.h) return;
-      const ok = (x, y) => !World.isSolid(map, x, y) && !World.isWarp(map, x, y);
-      if (ok(pos.x, pos.y)) {
-        G.savedPos = { map: pos.map, x: pos.x, y: pos.y, dir: pos.dir };
-        return;
-      }
-      // a spot that has since become solid (a new rope, say): the nearest
-      // open floor within a couple of steps still counts
-      const near = [[0, 1], [1, 0], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1], [0, 2], [2, 0], [-2, 0], [0, -2]]
-        .map(([dx, dy]) => ({ x: pos.x + dx, y: pos.y + dy })).find(p => ok(p.x, p.y) && World.tileAt(map, p.x, p.y) !== "#");
-      if (near && map.kind === "gallery") G.savedPos = { map: pos.map, x: near.x, y: near.y, dir: pos.dir };
-    } catch (e) {
-      console.warn("Ignoring an unreadable save", e);
-    }
+    try { data = JSON.parse(localStorage.getItem(Save.KEY) || "null"); } catch (e) { data = null; }
+    const visit = Save.parse(data, G.world, G.settings.lang);
+    Object.assign(G.settings, visit.settings);
+    Object.assign(G.tour, visit.tour);
+    for (const k of ["seen", "plan", "stamps", "spotted", "companion", "savedPos"]) G[k] = visit[k];
   }
 
   function resetProgress() {

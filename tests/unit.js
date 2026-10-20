@@ -9,6 +9,7 @@ const { MAP_DEFS } = require(path.join(ROOT, "js/maps.js"));
 const TourData = require(path.join(ROOT, "js/tour-data.js"));
 const Text = require(path.join(ROOT, "js/text.js"));
 const Lang = require(path.join(ROOT, "js/lang.js"));
+const Save = require(path.join(ROOT, "js/save.js"));
 
 
 let passes = 0, failures = 0;
@@ -332,6 +333,73 @@ for (const g of galleries) {
   check("a collapsed range reads naturally", TourData.minutesLabel({ low: 5, high: 5 }) === "about 5 minutes" && TourData.minutesLabel({ low: 20, high: 30 }) === "about 20–30 minutes");
   check("crossing floors costs more than staying on one",
     TourData.planMinutes(["mao-gong-ding", "ivory-ball"]).high > TourData.planMinutes(["mao-gong-ding", "song-hu"]).high);
+}
+
+// ---- the save file: a damaged or hand-edited save never stops the game ----
+{
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const sorted = set => [...set].sort();
+
+  const blank = Save.parse(null, world, "zh");
+  check("no save: a fresh visit in the visitor's language", blank.seen.size === 0 && blank.settings.lang === "zh" && blank.savedPos === null && blank.companion === "with");
+  check("no save: default settings", blank.settings.sound === true && blank.settings.textSpeed === "normal" && blank.settings.stepFree === false);
+  check("no save: no tour running", blank.tour.active === false && blank.tour.mode === "full" && blank.tour.gallery === null && blank.tour.visited.size === 0);
+
+  // a real visit survives the trip through JSON
+  const visit = {
+    seen: new Set(["mao-gong-ding", "jade-cong"]), plan: new Set(["ivory-ball"]), stamps: new Set(["bronze"]), spotted: new Set(["xi-zun"]),
+    companion: "alone", settings: { sound: false, music: true, autoTalk: false, stepFree: true, textSpeed: "fast", lang: "zh" },
+    tour: { active: true, mode: "gallery", gallery: "jade", visited: new Set(["jade-cong"]) }
+  };
+  const pos = { map: "3F", x: 12, y: 5, dir: "up" };
+  const saved = JSON.parse(JSON.stringify(Save.serialize(visit, pos)));
+  check("a save says which version it is", saved.v === 1);
+  const back = Save.parse(saved, world, "en");
+  check("round trip keeps what was seen, planned, stamped and found", same(sorted(back.seen), sorted(visit.seen)) && same(sorted(back.plan), ["ivory-ball"]) &&
+    same(sorted(back.stamps), ["bronze"]) && same(sorted(back.spotted), ["xi-zun"]), back);
+  check("round trip keeps settings and exploring alone", same(back.settings, visit.settings) && back.companion === "alone", back.settings);
+  check("round trip keeps the tour", back.tour.active && back.tour.mode === "gallery" && back.tour.gallery === "jade" && same(sorted(back.tour.visited), ["jade-cong"]));
+  check("round trip keeps where you stood", same(back.savedPos, pos), back.savedPos);
+
+  // odd contents are dropped one by one, keeping the rest
+  const odd = Save.parse({
+    seen: ["mao-gong-ding", "not-a-piece", 7, null, { id: "x" }],
+    plan: "ivory-ball", spotted: [["xi-zun"]], stamps: ["bronze", "gift-shop", 3],
+    companion: "ALONE",
+    settings: { sound: "yes", music: false, textSpeed: "warp", lang: "fr", stepFree: 1, extra: true, constructor: "x" },
+    tour: { active: "true", mode: "gallery", gallery: "attic", visited: "jade-cong" }
+  }, world, "en");
+  check("unknown pieces and non-strings are dropped from what was seen", same(sorted(odd.seen), ["mao-gong-ding"]), sorted(odd.seen));
+  check("a plan that isn't a list is ignored", odd.plan.size === 0 && odd.spotted.size === 0);
+  check("only real exhibitions keep a stamp", same(sorted(odd.stamps), ["bronze"]));
+  check("anything but \"alone\" means the docent comes along", odd.companion === "with");
+  check("settings of the wrong type keep their defaults", odd.settings.sound === true && odd.settings.stepFree === false && odd.settings.music === false);
+  check("an unknown text speed or language falls back", odd.settings.textSpeed === "normal" && odd.settings.lang === "en");
+  check("unknown settings aren't copied in", !Object.hasOwn(odd.settings, "extra") && !Object.hasOwn(odd.settings, "constructor"));
+  check("a one-gallery tour of an unknown gallery is dropped", odd.tour.mode === "full" && odd.tour.active === false && odd.tour.gallery === null);
+  check("an unknown tour mode becomes the full tour", Save.parse({ tour: { mode: "speedrun", active: true } }, world, "en").tour.mode === "full");
+
+  // where you stood: only a real, open tile counts
+  const at = p => Save.parse({ pos: p }, world, "en").savedPos;
+  check("an open tile is kept", same(at({ map: "1F", x: 12, y: 13, dir: "up" }), { map: "1F", x: 12, y: 13, dir: "up" }));
+  check("a stair step is a place you can stand", !!at({ map: "1F", x: 12, y: 8, dir: "up" }));
+  for (const p of [
+    { map: "constructor", x: 1, y: 1, dir: "up" }, { map: "1F", x: 12, y: 15, dir: "toString" }, { map: "1F", x: 1.5, y: 3, dir: "up" },
+    { map: "1F", x: -1, y: 3, dir: "up" }, { map: "1F", x: 99, y: 3, dir: "up" }, { map: "1F", x: 12, y: 2, dir: "up" }, "1F", null
+  ]) check(`a bad position is ignored: ${JSON.stringify(p)}`, at(p) === null, at(p));
+  const c = maps.jade.cases[0];
+  const nudged = at({ map: "jade", x: c.x, y: c.y, dir: "up" });
+  check("a gallery spot that became solid moves to open floor nearby", !!nudged && !World.isSolid(maps.jade, nudged.x, nudged.y) &&
+    Math.abs(nudged.x - c.x) + Math.abs(nudged.y - c.y) <= 2, nudged);
+  check("a lobby spot that became solid is ignored", at({ map: "1F", x: 3, y: 12, dir: "up" }) === null);
+
+  // garbage of every shape just gives a fresh visit, never an exception
+  for (const junk of [[], 42, "save", true, { seen: null, settings: null, tour: null, pos: {} }, { settings: [], tour: [], stamps: {} }, { pos: { map: "1F", x: "12", y: "13", dir: "up" } }]) {
+    let r = null, threw = false;
+    try { r = Save.parse(junk, world, "en"); } catch (e) { threw = true; }
+    check(`odd save ${JSON.stringify(junk)} is read without throwing`, !threw && r && r.seen instanceof Set && r.settings.lang === "en");
+  }
+  check("the save key is versioned", /^pixel-palace-v\d+$/.test(Save.KEY));
 }
 
 // ---- it installs and works offline ----

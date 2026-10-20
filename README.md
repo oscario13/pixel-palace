@@ -213,6 +213,7 @@ js/pieces/*.js        each exhibition's pieces in walking order: titles, dates, 
 js/tour-data.js       the 4 exhibitions, highlights, challenge questions, rooms, the visit-plan arithmetic
 js/maps.js            the lobbies as text; the galleries laid out from their piece lists
 js/world.js           parsing, collision, warps, pathfinding (no DOM)
+js/save.js            the save file: what's kept between visits, and reading it back safely (no DOM)
 js/text.js            dialogue paging and directions, in both languages (no DOM)
 js/art.js             hand-drawn people and decor as text pixel art
 js/artifact-sprites.js  generated, see tools/pixelize.js
@@ -246,7 +247,8 @@ Runs the unit tests in plain Node: maps, which side each exhibition opens
 from, warps, pathfinding across floors, every
 piece's data and source in both languages, the pieces per room against the
 museum's lists, photo files only for licensed photos, each case standing in its
-listed room, and dialogue paging in English and Chinese. Then it plays the game
+listed room, dialogue paging in English and Chinese, and save files that are
+damaged or hand-edited. Then it plays the game
 in headless Chrome with real key presses:
 
 - intro, then the highlights tour with auto-walk up two flights into the bronze gallery
