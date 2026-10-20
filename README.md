@@ -203,7 +203,9 @@ data terms ask.
 
 ```
 index.html            markup only
-css/game.css          text box, choice box, card, panels, touch pad, title
+css/game.css          text box, choice box, card, touch pad, toast, title
+css/viewer.css        the Look closer photo viewer
+css/panels.css        menu, notebook and stamp book, visit plan, guide
 css/rooms.css         room lookup, in-person seals, pieces without a photo
 css/feel.css          pixel frames, the choice pointer, menu tiles, animations
 js/lang.js            English / 中文: L(en, zh), the current language
